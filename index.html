@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QoS-Aware Traffic Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+body{background:radial-gradient(ellipse at 85% -10%,#0b2a5a 0,transparent 45%),#050a1c;color:#e2e8f0;font-family:ui-sans-serif,system-ui,sans-serif}
+h1,h2,h3,.hd{font-family:'Space Grotesk',ui-sans-serif,sans-serif}
+.glass{background:rgba(14,24,58,.55);backdrop-filter:blur(14px);border:1px solid rgba(110,140,255,.18);border-radius:1rem}
+.lv,.stg{background:rgba(255,255,255,.03);border:1px solid rgba(110,140,255,.2);border-radius:.75rem;text-align:left;padding:.75rem 1rem;transition:.2s}
+.lv.on,.stg.on{border-color:#2ee6f2;background:rgba(46,230,242,.09);box-shadow:0 0 18px rgba(46,230,242,.25)}
+input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:linear-gradient(90deg,#2ee6f2 var(--p,50%),#1c2748 var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid #2ee6f2;box-shadow:0 0 10px #2ee6f2;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #2ee6f2;cursor:pointer}
+.btn{border-radius:.75rem;padding:.7rem 1.4rem;font-weight:600;border:1px solid rgba(110,140,255,.25);background:rgba(255,255,255,.04)}
+.btn.pri{background:linear-gradient(180deg,#38f0fa,#18c3d6);color:#04101f;box-shadow:0 0 22px rgba(46,230,242,.45);border:0}
+.btn:disabled{opacity:.5}.btn:focus-visible,.lv:focus-visible,.stg:focus-visible,input:focus-visible{outline:2px solid #2ee6f2;outline-offset:2px}
+.seg button{padding:.4rem .9rem;border-radius:.5rem;font-size:.85rem}.seg .on{background:rgba(46,230,242,.18);color:#2ee6f2;border:1px solid #2ee6f2}
+.badge{display:inline-block;border-radius:999px;padding:.1rem .7rem;font-size:.75rem;font-weight:600;border:1px solid}
+.met{color:#4ade80;border-color:#16a34a;background:rgba(22,163,74,.15)}.bad{color:#fb7185;border-color:#e11d48;background:rgba(225,29,72,.15)}
+</style></head>
+<body class="min-h-screen px-4 py-8 md:px-8"><div class="max-w-6xl mx-auto space-y-14">
+
+<header class="flex flex-wrap items-center justify-between gap-3">
+  <div><p class="text-cyan-300 text-sm">Network engineering project</p><h1 class="text-3xl md:text-4xl font-bold">QoS-Aware Traffic Management</h1></div>
+  <div class="glass px-4 py-2 flex items-center gap-2 text-sm"><span id="dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span><span id="status">Checking C++ engine…</span></div>
+</header>
+
+<!-- 1. INPUTS -->
+<section id="sim">
+  <h2 class="text-3xl font-bold">Generate traffic and measure it</h2>
+  <p class="text-slate-400 mt-2 max-w-2xl">Each run sends the same random traffic through a plain FIFO queue and through the QoS pipeline, then returns measured latency, jitter, loss and throughput from the C++ backend.</p>
+  <div class="grid lg:grid-cols-[1fr_340px] gap-5 mt-6">
+    <div class="glass p-6">
+      <h3 class="font-semibold mb-3">Congestion level</h3>
+      <div id="lvls" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div id="sl" class="grid md:grid-cols-2 gap-x-8 gap-y-5 mt-6"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-6">
+        <button id="run" class="btn pri">Simulate traffic load</button><button id="reset" class="btn">Reset</button>
+        <span id="offer" class="text-sm text-slate-400"></span></div>
+      <p id="err" class="text-rose-400 text-sm mt-3"></p>
+    </div>
+    <aside class="glass p-6 flex flex-col gap-5">
+      <div class="flex justify-between items-center"><h3 class="font-semibold">Link status</h3><span class="text-xs flex items-center gap-2"><i id="sdot" class="w-2 h-2 rounded-full bg-slate-500"></i><span id="sst">Idle</span></span></div>
+      <div><div class="flex justify-between text-sm"><span class="text-slate-400">Offered load</span><b id="ol"></b></div>
+        <div class="h-2.5 rounded-full bg-slate-800 mt-2 overflow-hidden"><div id="bar" class="h-full rounded-full transition-all" style="background:linear-gradient(90deg,#2ee6f2,#f5a623,#f43f5e)"></div></div></div>
+      <div><p class="text-sm text-slate-400">Voice SLA</p><p class="text-xs text-slate-500">Loss ≤ 1%, latency ≤ 20 ms, jitter ≤ 1 ms</p>
+        <div class="grid grid-cols-2 gap-3 mt-3">
+          <div class="rounded-xl border border-slate-700/60 p-3 text-xs">Without QoS<div class="mt-2"><span id="slaF" class="badge">–</span></div></div>
+          <div class="rounded-xl border border-slate-700/60 p-3 text-xs">With QoS<div class="mt-2"><span id="slaQ" class="badge">–</span></div></div></div></div>
+      <p id="foot" class="text-xs text-slate-500 mt-auto"></p>
+    </aside>
+  </div>
+</section>
+
+<!-- 2. PIPELINE -->
+<section>
+  <div class="flex flex-wrap justify-between items-start gap-4">
+    <div><h2 class="text-3xl font-bold">Follow a packet through the pipeline</h2>
+    <p class="text-slate-400 mt-2 max-w-2xl">Four stages turn a jumble of mixed traffic into smooth, predictable delivery. Pick a stage to see what it does, or switch QoS off to watch the same traffic through a single shared queue.</p></div>
+    <div class="flex gap-3"><div class="seg glass p-1 flex"><button id="qOn" class="on">QoS on</button><button id="qOff">QoS off</button></div><select id="spd" aria-label="Animation speed" class="btn !py-1.5" style="background:#0a1230"><option value=".35">Very slow</option><option value=".7" selected>Slow</option><option value="1">Normal</option><option value="2">Fast</option></select><button id="pause" class="btn !py-1.5">Pause</button></div>
+  </div>
+  <div class="glass p-4 mt-5"><canvas id="cv" class="w-full h-auto block"></canvas>
+    <div class="flex flex-wrap justify-between gap-2 text-xs text-slate-400 mt-2">
+      <span><b style="color:#22d3ee">●</b> Voice (EF) &nbsp; <b style="color:#a78bfa">●</b> Video (AF41) &nbsp; <b style="color:#f5a623">●</b> Bulk download (BE) &nbsp; <b style="color:#fb7185">⊗</b> Dropped</span><span id="hud"></span></div></div>
+  <div id="stgs" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4"></div>
+  <div class="glass p-6 mt-4 grid md:grid-cols-[1fr_360px] gap-6"><div><h3 id="dT" class="text-lg font-semibold"></h3><p id="dP" class="text-slate-400 mt-2 text-sm leading-relaxed"></p></div><div id="dS" class="grid grid-cols-2 gap-4"></div></div>
+</section>
+
+<!-- 3. GRAPHS -->
+<section>
+  <h2 class="text-3xl font-bold">Measured results</h2>
+  <p class="text-slate-400 mt-2">Same traffic, two queueing strategies. Charts start on a log scale so small values stay visible. Switch a chart to Linear for true proportions, and hover a bar for the exact value. Zero is drawn at a tiny minimum so every bar shows.</p>
+  <p id="ovl" class="hidden mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 text-amber-200 text-sm px-4 py-2">The bars match because this run is not congested (the link is only <b id="ovlPct"></b> loaded), so QoS has nothing to fix. <button id="ovlBtn" class="underline font-semibold">Run Extreme congestion now</button></p>
+  <div id="chg" class="grid lg:grid-cols-2 gap-5 mt-6"></div>
+</section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id), rnd=(a,b)=>a+Math.random()*(b-a), fmt=n=>Math.round(n).toLocaleString();
+/* ---------- inputs ---------- */
+const SL=[['link','Link capacity',10,1000,10,100,v=>v+' Mbps'],['dur','Simulated duration',.5,3,.5,1,v=>v.toFixed(1)+' s'],
+['voice','Voice calls',0,64,1,6,v=>v],['video','Video streams',0,12,1,3,v=>v],['dl','Bulk downloads',1,8,1,8,v=>v],
+['gap','Bulk packet gap',20,2000,10,50,v=>v+' µs','Lower means heavier bulk load'],['vq','Video WFQ weight',500,9000,500,3000,v=>v+' B','DRR quantum per round'],
+['bq','Bulk WFQ weight',500,9000,500,1500,v=>v+' B','DRR quantum per round'],
+['prop','Path delay',0,100,1,5,v=>v+' ms','Propagation and fixed device delay']];
+const LV=[['Light','~70% link utilisation',0],['Moderate','Bulk traffic ~2.5x link',2.5],['Heavy','Bulk traffic ~10x link',10],['Extreme','Project default, ~19x link',19]];
+const V={};let level=3;
+$('sl').innerHTML=SL.map(([k,l,mn,mx,st,,,h])=>`<div><div class="flex justify-between text-sm"><label for="s_${k}">${l}</label><b id="o_${k}"></b></div><input id="s_${k}" type="range" min="${mn}" max="${mx}" step="${st}" class="w-full mt-2"><p class="text-xs text-slate-500 mt-1 h-4">${h||''}</p></div>`).join('');
+$('lvls').innerHTML=LV.map(([n,d],i)=>`<button class="lv" data-i="${i}"><b class="hd block">${n}</b><span class="text-xs text-slate-400">${d}</span></button>`).join('');
+const offered=()=>V.voice*.08+V.video*1.9+V.dl*12000/V.gap;
+function sync(manual){
+  SL.forEach(([k,,mn,mx,,,f])=>{const e=$('s_'+k);V[k]=+e.value;$('o_'+k).textContent=f(V[k]);e.style.setProperty('--p',(e.value-mn)/(mx-mn)*100+'%')});
+  if(manual)level=-1;
+  document.querySelectorAll('.lv').forEach((b,i)=>b.classList.toggle('on',i===level));
+  const o=offered(),pc=100*o/V.link;
+  $('offer').textContent=`Offers about ${fmt(o)} Mbps to a ${V.link} Mbps link (${fmt(pc)}%)`;
+  $('ol').textContent=`${fmt(o)} Mbps · ${fmt(pc)}% of link`;$('bar').style.width=Math.min(100,pc)+'%';
+  setTraffic();
+}
+function setv(k,v){$('s_'+k).value=v}
+function preset(i){const base=V.voice*.08+V.video*1.9;
+  const gap=i?12000*V.dl/(LV[i][2]*V.link):12000*V.dl/Math.max(1,.7*V.link-base);
+  setv('gap',Math.max(20,Math.min(2000,Math.round(gap/10)*10)));sync();level=i;sync()}
+function reset(){SL.forEach(([k,,,,,d])=>setv(k,d));level=3;sync()}
+SL.forEach(([k])=>$('s_'+k).addEventListener('input',()=>sync(true)));
+document.querySelectorAll('.lv').forEach(b=>b.onclick=()=>{preset(+b.dataset.i);run()});
+$('reset').onclick=reset;
+$('ovlBtn').onclick=()=>{preset(3);run();$('sim').scrollIntoView({behavior:'smooth'})};
+
+/* ---------- charts ---------- */
+const CN=['Voice','Video','Bulk'];
+const MET=[['avg','cLat','Average latency','ms',.01],['loss','cLoss','Packet loss','%',.01],['jitter','cJit','Jitter','ms',.001],['thr','cThr','Delivered throughput','Mbps',.01]];
+$('chg').innerHTML=MET.map(([f,id,t,u])=>`<div class="glass p-4"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">${t} (${u})</h3><div class="seg flex" role="group" aria-label="Scale for ${t}"><button data-f="${f}" data-s="logarithmic" class="on">Log</button><button data-f="${f}" data-s="linear">Linear</button></div></div><canvas id="${id}"></canvas></div>`).join('');
+const ds=(label,col)=>({label,data:[],raw:[],backgroundColor:col,borderRadius:6,borderSkipped:false});
+const CH={};
+MET.forEach(([f,id,t,u,fl])=>CH[f]=new Chart($(id),{type:'bar',data:{labels:CN,datasets:[ds('Without QoS (FIFO)','#f43f5e'),ds('With QoS','#2ee6f2')]},
+ options:{responsive:true,plugins:{legend:{labels:{color:'#94a3b8'}},tooltip:{callbacks:{label:c=>{const v=c.dataset.raw[c.dataIndex];return `${c.dataset.label}: ${v<fl?'< '+fl:v.toPrecision(3)} ${u}`}}}},
+ scales:{x:{ticks:{color:'#94a3b8'},grid:{display:false}},y:{type:'logarithmic',min:fl/10,ticks:{color:'#94a3b8'},grid:{color:'#16203f'}}}}}));
+$('chg').addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(!b)return;
+  const f=b.dataset.f,y=CH[f].options.scales.y,log=b.dataset.s==='logarithmic';
+  b.parentNode.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  y.type=b.dataset.s;if(log){y.min=MET.find(m=>m[0]===f)[4]/10;delete y.beginAtZero}else{delete y.min;y.beginAtZero=true}CH[f].update()});
+let R=null;
+function plot(){
+  const same=R.fifo.classes.every((x,i)=>Math.abs(x.avg-R.qos.classes[i].avg)<.5&&Math.abs(x.loss-R.qos.classes[i].loss)<.5);
+  $('ovl').classList.toggle('hidden',!same);$('ovlPct').textContent=fmt(R.config.load_pct)+'%';
+  MET.forEach(([f,,,,fl])=>{[R.fifo,R.qos].forEach((s,i)=>{const d=CH[f].data.datasets[i];d.raw=s.classes.map(x=>x[f]);d.data=d.raw.map(v=>Math.max(v,fl))});CH[f].update()})}
+const sla=s=>{const v=s.classes[0];return v.loss<=1&&v.avg<=20&&v.jitter<=1};
+async function run(){
+  $('run').disabled=true;$('err').textContent='';$('sst').textContent='Running';$('sdot').className='w-2 h-2 rounded-full bg-amber-400';
+  try{
+    const r=await fetch('/api/simulate?'+new URLSearchParams(V)),d=await r.json();if(d.error)throw new Error(d.error);
+    R=d;plot();
+    [['slaF',R.fifo],['slaQ',R.qos]].forEach(([id,s])=>{const ok=sla(s);$(id).textContent=ok?'Met':'Breached';$(id).className='badge '+(ok?'met':'bad')});
+    $('sst').textContent='Complete';$('sdot').className='w-2 h-2 rounded-full bg-emerald-400';
+    $('foot').textContent=`Simulated ${V.dur}s of traffic in ${d.elapsed}s · seed ${d.seed} · ${new Date().toLocaleTimeString()}`;
+    details();
+  }catch(e){$('err').textContent='Engine request failed: '+e.message+'. Is server.py running?';$('sst').textContent='Failed';$('sdot').className='w-2 h-2 rounded-full bg-rose-500'}
+  $('run').disabled=false;
+}
+$('run').onclick=run;
+async function health(){try{await fetch('/api/health');$('dot').className='w-2.5 h-2.5 rounded-full bg-emerald-400';$('status').textContent='C++ engine active'}catch{$('dot').className='w-2.5 h-2.5 rounded-full bg-rose-500';$('status').textContent='Engine offline'}}
+
+/* ---------- pipeline animation ---------- */
+const PW=1100,PH=340,MY=170,cv=$('cv'),g=cv.getContext('2d');cv.width=PW;cv.height=PH;
+const ST=[{x:10,w:175,t:'1  Intake'},{x:190,w:190,t:'2  Classify & mark'},{x:386,w:390,t:'3  Queue & police'},{x:782,w:308,t:'4  Output'}];
+const SC=[{tag:'EF',c:'#22d3ee',y:MY-95},{tag:'AF41',c:'#a78bfa',y:MY},{tag:'BE',c:'#f5a623',y:MY+95}], CAPQ=[6,10,16];
+const P={qos:true,paused:matchMedia('(prefers-reduced-motion:reduce)').matches,pk:[],dr:[],del:0,dc:[0,0,0],q:[[],[],[]],n:0,tok:4,acc:0,spd:.7,fr:0,stage:1,sT:0,spawn:.3,mix:[.1,.15,.75],r:2};
+$('pause').textContent=P.paused?'Resume':'Pause';
+function setTraffic(){
+  const pps=[V.voice*50,V.video*198,V.dl*1e6/V.gap].map(x=>Math.pow(x,.3)),s=pps.reduce((a,b)=>a+b,0)||1;
+  P.mix=pps.map(x=>x/s);P.r=Math.max(1,Math.min(6,Math.round(V.vq/V.bq)));P.ratio=V.vq/V.bq;
+  P.spawn=Math.max(.035,Math.min(.25,.035+.03*Math.log2(Math.max(10,100*offered()/V.link)/10)));
+}
+function reflow(){P.pk=[];P.dr=[];P.del=0;P.dc=[0,0,0];P.q=[[],[],[]];P.n=0;P.tok=4}
+function spawn(){let r=Math.random(),c=0,s=0;for(;c<2;c++){s+=P.mix[c];if(r<s)break}
+  P.pk.push({c,x:rnd(22,172),y:rnd(34,PH-34),st:0,tag:0,lt:0,r:rnd(3,5)})}
+function drop(p){p.dead=1;P.dc[p.c]++;P.dr.push({x:p.x,y:p.y,a:1})}
+function enter(p){
+  if(P.qos){if(p.c===2){if(P.tok<1)return drop(p);P.tok--}
+    if(P.q[p.c].length>=CAPQ[p.c])return drop(p);P.q[p.c].push(p)}
+  else{if(P.q[0].length>=28)return drop(p);P.q[0].push(p)}
+  p.st=2}
+function serve(){const q=P.q;let k=-1;
+  if(P.qos){if(q[0].length)k=0;else if(q[1].length&&q[2].length)k=(P.n++%(P.r+1))<P.r?1:2;else k=q[1].length?1:q[2].length?2:-1}
+  else k=q[0].length?0:-1;
+  if(k<0)return;q[k].shift().st=3;P.del++}
+function upd(p){
+  if(p.st===0){p.x+=(190-p.x)*.006+.25;p.y+=(MY-p.y)*.012;if(p.x>183)p.st=1}
+  else if(p.st===1){p.x+=1.5;p.y+=(MY-p.y)*.1;if(!p.tag&&p.x>285){p.tag=1;p.lt=90}if(p.x>=386)enter(p)}
+  else if(p.st===2){const k=P.qos?p.c:0,i=P.q[k].indexOf(p);p.x=Math.min(770-i*13,p.x+1.5);p.y+=((P.qos?SC[k].y:MY)-p.y)*.05}
+  else{p.x+=1.8;p.y+=((p.x>810?MY:(P.qos?SC[p.c].y:MY))-p.y)*.05;if(p.x>1115)p.dead=1}
+  if(p.lt>0)p.lt--}
+function step(){
+  P.fr++;P.tok=Math.min(4,P.tok+.12);  // policer refill: ~0.12 bulk packets per frame
+  if(Math.random()<P.spawn)spawn();
+  if(P.fr%7===0)serve();
+  P.pk.forEach(upd);
+  P.pk=P.pk.filter(p=>!p.dead);P.dr.forEach(d=>{d.y+=.6;d.a-=.02});P.dr=P.dr.filter(d=>d.a>0);
+  if(++P.sT>=480){P.sT=0;setStage((P.stage+1)%4)}
+}
+function dot(p,col,a=1){const near=Math.max(0,30-Math.abs(p.x-285))*.2*(p.st===1),r=(p.tag?5:p.r)+near;
+  g.globalAlpha=a;g.fillStyle=col;g.shadowColor=col;g.shadowBlur=p.tag?10:0;g.beginPath();g.arc(p.x,p.y,r,0,7);g.fill();g.shadowBlur=0;g.globalAlpha=1}
+function draw(){
+  g.clearRect(0,0,PW,PH);g.textAlign='left';
+  ST.forEach((s,i)=>{g.beginPath();g.roundRect(s.x,6,s.w,PH-12,12);g.fillStyle=i===P.stage?'rgba(46,230,242,.09)':'rgba(20,35,80,.35)';g.fill();
+    g.strokeStyle=i===P.stage?'#2ee6f2':'rgba(120,150,255,.2)';g.lineWidth=i===P.stage?1.5:1;g.stroke();
+    g.fillStyle=i===P.stage?'#2ee6f2':'#8b96b8';g.font='600 12px ui-monospace,monospace';g.fillText(s.t,s.x+12,26)});
+  const grad=g.createLinearGradient(0,40,0,PH-30);grad.addColorStop(0,'rgba(46,230,242,0)');grad.addColorStop(.5,'rgba(46,230,242,.7)');grad.addColorStop(1,'rgba(46,230,242,0)');
+  g.fillStyle=grad;g.fillRect(284,40,1.5,PH-70);
+  g.fillStyle='rgba(120,150,255,.12)';g.fillRect(190,MY-9,900,18);
+  g.font='11px ui-monospace,monospace';g.textAlign='right';
+  if(P.qos){SC.forEach((s,k)=>{if(k!==1){g.fillStyle='rgba(120,150,255,.1)';g.fillRect(386,s.y-9,390,18)}
+    g.fillStyle=s.c;g.fillText(['EF · strict priority',`AF41 · WFQ ×${P.ratio.toFixed(1)}`,'BE · WFQ ×1, shaped'][k],770,s.y-14)})}
+  else{g.fillStyle='#8b96b8';g.fillText('single shared FIFO',770,MY-14)}
+  g.textAlign='center';g.font='9px ui-monospace,monospace';
+  P.pk.forEach(p=>{dot(p,p.tag?SC[p.c].c:'#8b96b8',p.tag?1:.6);if(P.qos&&p.lt>0){g.fillStyle=SC[p.c].c;g.globalAlpha=p.lt/90;g.fillText(SC[p.c].tag,p.x,p.y-10);g.globalAlpha=1}});
+  P.dr.forEach(d=>{g.globalAlpha=d.a;g.strokeStyle='#fb7185';g.lineWidth=1.5;g.beginPath();g.arc(d.x,d.y,6,0,7);g.moveTo(d.x-4,d.y-4);g.lineTo(d.x+4,d.y+4);g.moveTo(d.x+4,d.y-4);g.lineTo(d.x-4,d.y+4);g.stroke();g.globalAlpha=1});
+}
+function hud(){$('hud').textContent=`delivered ${P.del} · dropped voice ${P.dc[0]}, video ${P.dc[1]}, bulk ${P.dc[2]}`}
+function loop(){if(!P.paused){P.acc+=P.spd;while(P.acc>=1){step();P.acc--}}draw();if(P.fr%10===0)hud();
+  document.querySelectorAll('.pb').forEach((b,i)=>b.style.width=i===P.stage?P.sT/4.8+'%':'0');requestAnimationFrame(loop)}
+$('spd').onchange=e=>P.spd=+e.target.value;
+$('pause').onclick=()=>{P.paused=!P.paused;$('pause').textContent=P.paused?'Resume':'Pause'};
+[['qOn',true],['qOff',false]].forEach(([id,v])=>$(id).onclick=()=>{P.qos=v;reflow();$('qOn').className=v?'on':'';$('qOff').className=v?'':'on';details()});
+
+/* ---------- stage cards + detail ---------- */
+const SG=[['1. Packet intake','Mixed traffic arrives'],['2. Classification & marking','Inspect, tag priority'],['3. Queuing & policing','WFQ, shaping, policing'],['4. Optimized output','Smooth, low-latency delivery']];
+$('stgs').innerHTML=SG.map(([t,s],i)=>`<button class="stg relative overflow-hidden" data-i="${i}"><b class="hd block">${t}</b><span class="text-sm text-slate-400">${s}</span><i class="pb absolute left-0 bottom-0 h-0.5 bg-cyan-300" style="width:0"></i></button>`).join('');
+document.querySelectorAll('.stg').forEach(b=>b.onclick=()=>{P.sT=0;setStage(+b.dataset.i)});
+function setStage(i){P.stage=i;document.querySelectorAll('.stg').forEach((b,j)=>b.classList.toggle('on',j===i));details()}
+function details(){
+  const q=P.qos,e=R&&(q?R.qos:R.fifo),c=e&&e.classes,d=x=>e?x:'–',ms=x=>x<1?x.toFixed(2)+' ms':x.toFixed(1)+' ms';
+  const T=[
+   ['Voice calls, video streams and bulk downloads all start sending at once. Every flow keeps its own clock, so their packets interleave at the link in no particular order.',
+    [['Voice packets',d(c&&fmt(c[0].total))],['Video packets',d(c&&fmt(c[1].total))],['Bulk packets',d(c&&fmt(c[2].total))],['Offered load',fmt(offered())+' Mbps']]],
+   [q?'Each packet is inspected (addresses, ports, protocol) and marked with a DSCP value: EF for voice, AF41 for video, best-effort for bulk data. Every later stage reads this mark instead of guessing.':'Without QoS nothing is marked. Every packet is treated the same and joins one shared queue.',
+    [['Voice marked',q?'EF':'none'],['Video marked',q?'AF41':'none'],['Bulk marked',q?'BE':'none'],['Packets classified',d(c&&fmt(c[0].total+c[1].total+c[2].total))]]],
+   [q?'A token bucket meters each class and drops excess traffic before it can crowd the queues. Voice is served first, while video and bulk share the rest by weighted fair queuing. Bulk queues use ECN marks to slow senders early.':'All traffic waits in one tail-drop FIFO queue. Once bulk fills the buffer, voice and video wait behind it and are dropped along with it.',
+    q?[['Policer drops',d(e&&fmt(e.policer))],['Queue drops',d(e&&fmt(e.queue))],['ECN marks',d(e&&fmt(e.ecn))],['Video : bulk weight',(V.vq/V.bq).toFixed(1)+' : 1']]
+     :[['Queue drops',d(e&&fmt(e.queue))],['Voice dropped',d(c&&fmt(c[0].lost))],['Video dropped',d(c&&fmt(c[1].lost))],['Bulk dropped',d(c&&fmt(c[2].lost))]]],
+   [q?'The link sends voice first, so a call waits only for the packet already on the wire. Video and bulk share the remaining capacity in their configured ratio.':'The link sends packets in arrival order, so every call waits behind whatever bulk data arrived first.',
+    [['Voice latency',d(c&&ms(c[0].avg))],['Voice jitter',d(c&&ms(c[0].jitter))],['Voice loss',d(c&&c[0].loss.toFixed(1)+'%')],['Throughput',d(c&&c.reduce((s,x)=>s+x.thr,0).toFixed(1)+' Mbps')]]]][P.stage];
+  $('dT').textContent=SG[P.stage][0];$('dP').textContent=T[0];
+  $('dS').innerHTML=T[1].map(([l,v])=>`<div><p class="text-xs text-slate-400">${l}</p><p class="text-xl font-bold hd">${v}</p></div>`).join('');
+}
+sync();setStage(1);health();setInterval(health,5000);run();loop();
+</script></body></html>
